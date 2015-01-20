@@ -28,8 +28,7 @@ public class MooshimeterDevice {
 
     private BluetoothLeService bt_service;
     private BluetoothGattService bt_gatt_service;
-    private int rssi;
-    public int adv_build_time;
+    private Context mContext;
 
     public enum CH3_MODES {
         VOLTAGE,
@@ -252,6 +251,7 @@ public class MooshimeterDevice {
         // FIXME:  I am unhappy with the way this class and DeviceActivity are structured
         // There are a lot of interdependencies that make them complicated to work with.
         // But I don't want to change too many things at once.
+        mContext = context;
         final IntentFilter fi = new IntentFilter();
         fi.addAction(BluetoothLeService.ACTION_GATT_SERVICES_DISCOVERED);
         fi.addAction(BluetoothLeService.ACTION_DATA_NOTIFY);
@@ -283,6 +283,10 @@ public class MooshimeterDevice {
                 });
             }
         });
+    }
+
+    public void close() {
+        mContext.unregisterReceiver(mGattUpdateReceiver);
     }
 
     ////////////////////////////////
@@ -326,6 +330,10 @@ public class MooshimeterDevice {
         BluetoothGattCharacteristic c = bt_gatt_service.getCharacteristic(SensorTagGatt.METER_SAMPLE);
         cb = new_cb;
         bt_service.setCharacteristicNotification(c,enable);
+    }
+    public boolean isMeterStreamSampleEnabled() {
+        BluetoothGattCharacteristic c = bt_gatt_service.getCharacteristic(SensorTagGatt.METER_SAMPLE);
+        return bt_service.isNotificationEnabled(c);
     }
 
     ////////////////////////////////

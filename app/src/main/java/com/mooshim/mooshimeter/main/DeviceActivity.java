@@ -60,7 +60,9 @@ import java.util.List;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGattService;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
+import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.v4.app.FragmentActivity;
@@ -68,6 +70,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.OrientationEventListener;
 import android.view.View;
 import android.view.Window;
 import android.widget.Button;
@@ -88,11 +91,8 @@ public class DeviceActivity extends FragmentActivity {
 
 	// BLE
 	private BluetoothLeService mBtLeService = null;
-	private BluetoothDevice mBluetoothDevice = null;
 	private List<BluetoothGattService> mServiceList = null;
-	private static final int GATT_TIMEOUT = 250; // milliseconds
 	private boolean mServicesRdy = false;
-	private boolean mIsReceiving = false;
     public static MooshimeterDevice mMeter = null;
 
 	// SensorTagGatt
@@ -117,6 +117,8 @@ public class DeviceActivity extends FragmentActivity {
     private Button depth_button;
     private Button zero_button;
 
+    private OrientationEventListener orientation_listener;
+
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		requestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
@@ -125,51 +127,7 @@ public class DeviceActivity extends FragmentActivity {
 
 		// BLE
 		mBtLeService = BluetoothLeService.getInstance();
-		mBluetoothDevice = intent.getParcelableExtra(EXTRA_DEVICE);
 		mServiceList = new ArrayList<BluetoothGattService>();
-
-        mMeter = new MooshimeterDevice(this, new Block() {
-            @Override
-            public void run() {
-                mMeter.meter_settings.target_meter_state = mMeter.METER_RUNNING;
-                mMeter.meter_settings.calc_settings |= 0x50;
-                mMeter.sendMeterSettings(new Block() {
-                    @Override
-                    public void run() {
-                        Log.i(null,"Mode set");
-                        mMeter.enableMeterStreamSample(true, new Block() {
-                            @Override
-                            public void run() {
-                                Log.i(null,"Stream requested");
-                            }
-                        }, new Block() {
-                            @Override
-                            public void run() {
-                                Log.i(null,"Sample received!");
-                                valueLabelRefresh(0);
-                                valueLabelRefresh(1);
-
-                                // Handle autoranging
-                                // Save a local copy of settings
-                                byte[] save = mMeter.meter_settings.pack();
-                                mMeter.applyAutorange();
-                                byte[] compare = mMeter.meter_settings.pack();
-                                // TODO: There must be a more efficient way to do this.  But I think like a c-person
-                                // Check if anything changed, and if so apply changes
-                                if(!save.equals(compare)) {
-                                    mMeter.sendMeterSettings(new Block() {
-                                        @Override
-                                        public void run() {
-                                            refreshAllControls();
-                                        }
-                                    });
-                                }
-                            }
-                        });
-                    }
-                });
-            }
-        });
 
         // GUI
         setContentView(R.layout.meter_view);
@@ -196,9 +154,32 @@ public class DeviceActivity extends FragmentActivity {
         depth_auto_button = (Button) findViewById(R.id.depth_auto_button);
         depth_button      = (Button) findViewById(R.id.depth_button);
         zero_button = (Button) findViewById(R.id.zero_button);
+
+        // Catch orientation change
+        //orientation_listener = new OrientationEventListener(this, SensorManager.SENSOR_DELAY_UI) {
+        //    @Override
+        //    public void onOrientationChanged(int i) {
+        //        Log.i(null,"Orientation changed!");
+        //    }
+        //};
+        //orientation_listener.enable();
 	}
 
-	@Override
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        switch(newConfig.orientation) {
+            case Configuration.ORIENTATION_LANDSCAPE:
+                Log.d(null,"LANDSCAPE");
+                break;
+            case Configuration.ORIENTATION_PORTRAIT:
+                Log.d(null,"PORTRAIT");
+                break;
+
+        }
+    }
+
+    @Override
 	public void onDestroy() {
 		super.onDestroy();
 		finishActivity(PREF_ACT_REQ);
@@ -236,18 +217,40 @@ public class DeviceActivity extends FragmentActivity {
 	protected void onResume() {
 		// Log.d(TAG, "onResume");
 		super.onResume();
-		if (!mIsReceiving) {
-			mIsReceiving = true;
-		}
+        mMeter = new MooshimeterDevice(this, new Block() {
+            @Override
+            public void run() {
+                mMeter.meter_settings.target_meter_state = mMeter.METER_RUNNING;
+                mMeter.meter_settings.calc_settings |= 0x50;
+                mMeter.sendMeterSettings(new Block() {
+                    @Override
+                    public void run() {
+                        Log.i(null,"Mode set");
+                        mMeter.enableMeterStreamSample(true, new Block() {
+                            @Override
+                            public void run() {
+                                Log.i(null,"Stream requested");
+                            }
+                        }, new Block() {
+                            @Override
+                            public void run() {
+                                stream_cb();
+                            }
+                        });
+                    }
+                });
+            }
+        });
 	}
 
 	@Override
 	protected void onPause() {
 		// Log.d(TAG, "onPause");
 		super.onPause();
-		if (mIsReceiving) {
-			mIsReceiving = false;
-		}
+        if(mMeter.isMeterStreamSampleEnabled()) {
+            mMeter.enableMeterStreamSample(false, null, null);
+            mMeter.close();
+        }
 	}
 
 	BluetoothGattService getOadService() {
@@ -340,9 +343,6 @@ public class DeviceActivity extends FragmentActivity {
 		switch (requestCode) {
 		case PREF_ACT_REQ:
 			Toast.makeText(this, "Applying preferences", Toast.LENGTH_SHORT).show();
-			if (!mIsReceiving) {
-				mIsReceiving = true;
-			}
 			break;
 		case FWUPDATE_ACT_REQ:
 			// FW update cancelled so resume
@@ -375,6 +375,28 @@ public class DeviceActivity extends FragmentActivity {
         //Truncate
         retval = retval.substring(0, Math.min(retval.length(), 8));
         return retval;
+    }
+
+    private void stream_cb() {
+        Log.i(null,"Sample received!");
+        valueLabelRefresh(0);
+        valueLabelRefresh(1);
+
+        // Handle autoranging
+        // Save a local copy of settings
+        byte[] save = mMeter.meter_settings.pack();
+        mMeter.applyAutorange();
+        byte[] compare = mMeter.meter_settings.pack();
+        // TODO: There must be a more efficient way to do this.  But I think like a c-person
+        // Check if anything changed, and if so apply changes
+        if(!save.equals(compare)) {
+            mMeter.sendMeterSettings(new Block() {
+                @Override
+                public void run() {
+                    refreshAllControls();
+                }
+            });
+        }
     }
 
     /////////////////////////
