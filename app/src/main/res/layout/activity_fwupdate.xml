@@ -53,8 +53,7 @@
             android:layout_height="fill_parent"
             android:layout_weight="1.5"
             android:gravity="left"
-            android:text="@string/no_image_sel"
-            android:textAlignment="gravity" />
+            android:text="@string/no_image_sel" />
     </LinearLayout>
 
     <LinearLayout

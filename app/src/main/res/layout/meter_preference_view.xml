@@ -24,7 +24,6 @@
         android:textSize="24dp"
         android:maxLength="16"
         android:singleLine="true"
-        android:textAlignment="center"
         android:editable="true" />
 
     <Space

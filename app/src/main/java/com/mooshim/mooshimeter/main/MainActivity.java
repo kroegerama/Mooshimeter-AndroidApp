@@ -150,10 +150,7 @@ public class MainActivity extends ViewPagerActivity {
 			mBleSupported = false;
 		}
 
-		// Initializes a Bluetooth adapter. For API level 18 and above, get a
-		// reference to BluetoothAdapter through BluetoothManager.
-		mBluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-		mBtAdapter = mBluetoothManager.getAdapter();
+		mBtAdapter = BluetoothAdapter.getDefaultAdapter();
 
 		// Checks if Bluetooth is supported on the device.
 		if (mBtAdapter == null) {
@@ -376,7 +373,18 @@ public class MainActivity extends ViewPagerActivity {
 	// GUI methods
 	//
 	public void updateGuiState() {
-		boolean mBtEnabled = mBtAdapter.isEnabled();
+        boolean mBtEnabled = false;
+        if(mBtAdapter == null) {
+            mBtAdapter = BluetoothAdapter.getDefaultAdapter();
+            // Checks if Bluetooth is supported on the device.
+            if (mBtAdapter == null) {
+                Toast.makeText(this, R.string.bt_not_supported, Toast.LENGTH_LONG).show();
+                mBleSupported = false;
+            } else {
+                mBtEnabled = mBtAdapter.isEnabled();
+            }
+        }
+
 
 		if (mBtEnabled) {
 			if (mScanning) {

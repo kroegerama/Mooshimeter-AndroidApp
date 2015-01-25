@@ -3,6 +3,7 @@
 
     <!-- Main activity -->
     <string name="app_name">Mooshimeter</string>
+    <string name="app_namep2">Mooshimeter</string>
     <string name="button_scan">Scan</string>
     <string name="connect">Connect</string>
     <string name="title_device_list">Device List</string>
